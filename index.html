@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertidor de Imágenes Pro</title>
+    <!-- Incluir JSZip para empaquetar múltiples imágenes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f3f4f6;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --primary: #0f172a;
+            --primary-hover: #334155;
+            --accent: #3b82f6;
+            --radius: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+        }
+
+        .converter-box {
+            background: var(--surface);
+            padding: 2.5rem;
+            border-radius: var(--radius);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: slideUp 0.6s ease forwards;
+        }
+
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Dropzone Styling */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem 1.5rem;
+            transition: var(--transition);
+            background-color: #fafafa;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--accent);
+            background-color: #eff6ff;
+        }
+
+        .drop-zone>p {
+            margin: 0;
+            color: var(--text-muted);
+            font-weight: 500;
+            pointer-events: none;
+        }
+
+        .drop-zone p span {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .actions-row {
+            display: flex;
+            gap: 0.5rem;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: var(--text-main);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .btn-secondary:hover {
+            background-color: #cbd5e1;
+        }
+
+        .hidden-input {
+            display: none;
+        }
+
+        /* Preview Image */
+        .preview-container {
+            width: 100%;
+            height: 0;
+            overflow: hidden;
+            transition: height 0.4s ease;
+            position: relative;
+        }
+
+        .preview-container.active {
+            height: 180px;
+            margin-bottom: 1.5rem;
+        }
+
+        #preview {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        #preview.loaded {
+            opacity: 1;
+        }
+
+        .count-badge {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            backdrop-filter: blur(4px);
+        }
+
+
+        /* Controles */
+        .controls {
+            display: flex;
+            gap: 1rem;
+            flex-direction: column;
+        }
+
+        select {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-size: 0.95rem;
+            color: var(--text-main);
+            background-color: var(--surface);
+            cursor: pointer;
+            outline: none;
+            transition: var(--transition);
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1em;
+        }
+
+        select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 10px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: var(--transition);
+            transform: translateY(0);
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background-color: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-top: 5px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.2s ease;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="converter-box">
+        <h2>Transforma</h2>
+        <p class="subtitle">Formatos locales. Cero servidores. Múltiples a la vez.</p>
+
+        <div class="drop-zone" id="dropZone">
+            <p id="dropZoneText">Arrastra imágenes/carpetas aquí</p>
+            <div class="actions-row">
+                <button type="button" class="btn-secondary"
+                    onclick="document.getElementById('imageInput').click()">Archivos</button>
+                <button type="button" class="btn-secondary"
+                    onclick="document.getElementById('folderInput').click()">Carpeta</button>
+            </div>
+            <input type="file" class="hidden-input" id="imageInput" accept="image/png, image/jpeg, image/webp" multiple>
+            <!-- input webkitdirectory para permitir seleccion nativa de carpetas completas -->
+            <input type="file" class="hidden-input" id="folderInput" webkitdirectory directory multiple>
+        </div>
+
+        <div class="preview-container" id="previewContainer">
+            <img id="preview" alt="Vista previa">
+            <span class="count-badge" id="countBadge" style="display:none;">1 archivo</span>
+        </div>
+
+        <div class="controls">
+            <select id="formatSelect">
+                <option value="image/webp">Convertir a WebP</option>
+                <option value="image/jpeg">Convertir a JPEG</option>
+                <option value="image/png">Convertir a PNG</option>
+            </select>
+
+            <button id="convertBtn" disabled>Convertir</button>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const imageInput = document.getElementById('imageInput');
+        const folderInput = document.getElementById('folderInput');
+
+        const formatSelect = document.getElementById('formatSelect');
+        const convertBtn = document.getElementById('convertBtn');
+        const previewContainer = document.getElementById('previewContainer');
+        const preview = document.getElementById('preview');
+        const countBadge = document.getElementById('countBadge');
+        const dropZoneText = document.getElementById('dropZoneText');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        let imageFilesList = []; // Centraliza los archivos a procesar
+
+        // --- Drag & Drop ---
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false); // Evitar abrir archivo en navegador
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        // Al soltar
+        dropZone.addEventListener('drop', async (e) => {
+            const items = e.dataTransfer.items;
+            if (!items) return;
+
+            dropZoneText.innerHTML = "Procesando archivos...";
+            convertBtn.disabled = true;
+
+            const filesToProcess = [];
+
+            // Explorar los items soltados (pueden ser archivos o carpetas)
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        try {
+                            const extractedFiles = await scanEntry(entry);
+                            filesToProcess.push(...extractedFiles);
+                        } catch (err) {
+                            console.error(err);
+                        }
+                    }
+                }
+            }
+
+            processCollectedFiles(filesToProcess);
+        });
+
+        // Explorar directorios recursivamente
+        async function scanEntry(entry) {
+            return new Promise((resolve, reject) => {
+                if (entry.isFile) {
+                    entry.file(file => {
+                        resolve(isValidImage(file) ? [file] : []);
+                    }, reject);
+                } else if (entry.isDirectory) {
+                    const dirReader = entry.createReader();
+                    const results = [];
+
+                    const readEntries = () => {
+                        dirReader.readEntries(async (entries) => {
+                            if (entries.length === 0) {
+                                resolve(results);
+                            } else {
+                                const promises = entries.map(e => scanEntry(e));
+                                const filesArrays = await Promise.all(promises);
+                                filesArrays.forEach(arr => results.push(...arr));
+                                readEntries();
+                            }
+                        }, reject);
+                    };
+                    readEntries();
+                } else {
+                    resolve([]);
+                }
+            });
+        }
+
+        // Selección nativa desde inputs
+        imageInput.addEventListener('change', function () {
+            processCollectedFiles(Array.from(this.files).filter(isValidImage));
+        });
+
+        folderInput.addEventListener('change', function () {
+            processCollectedFiles(Array.from(this.files).filter(isValidImage));
+        });
+
+        function isValidImage(file) {
+            return file.type.startsWith('image/');
+        }
+
+        // --- Manejo de la lista de archivos encontrados ---
+        function processCollectedFiles(files) {
+            if (files.length === 0) {
+                dropZoneText.innerHTML = "No se encontraron imágenes válidas.";
+                imageFilesList = [];
+                convertBtn.disabled = true;
+                return;
+            }
+
+            imageFilesList = files;
+            const firstFile = files[0];
+
+            // Renderizar la primera imagen de prueba
+            const objectURL = URL.createObjectURL(firstFile);
+            preview.onload = () => {
+                previewContainer.classList.add('active');
+                setTimeout(() => preview.classList.add('loaded'), 100);
+            };
+            preview.src = objectURL;
+
+            // Actualizar UI
+            countBadge.style.display = 'block';
+            countBadge.innerHTML = `${files.length} archivo${files.length > 1 ? 's' : ''}`;
+
+            if (files.length === 1) {
+                dropZoneText.innerHTML = `Lista: <span>${firstFile.name}</span>`;
+                convertBtn.innerText = "Convertir Imagen";
+            } else {
+                dropZoneText.innerHTML = `Imágenes cargadas: <span>${files.length}</span>`;
+                convertBtn.innerText = `Convertir Lote (${files.length})`;
+            }
+
+            convertBtn.disabled = false;
+        }
+
+        // --- Lógica de Conversión en Lote ---
+        convertBtn.addEventListener('click', async () => {
+            if (imageFilesList.length === 0) return;
+
+            convertBtn.disabled = true;
+            progressBar.classList.add('active');
+            progressFill.style.width = '0%';
+
+            const total = imageFilesList.length;
+            const format = formatSelect.value;
+            const extension = format.split('/')[1];
+
+            if (total === 1) {
+                convertBtn.innerText = "Procesando...";
+                const dataUrl = await convertSingleFile(imageFilesList[0], format);
+                downloadLink(dataUrl, `convertida-${Date.now()}.${extension}`);
+
+                progressFill.style.width = '100%';
+                setTimeout(() => resetBtn(total), 1000);
+            } else {
+                // Múltiples imágenes -> Crear ZIP
+                convertBtn.innerText = "Preparando ZIP...";
+                const zip = new JSZip();
+
+                for (let i = 0; i < total; i++) {
+                    const file = imageFilesList[i];
+                    convertBtn.innerText = `Convirtiendo ${i + 1}/${total}`;
+                    const dataUrl = await convertSingleFile(file, format);
+
+                    // Quitar prefijo data:image/..;base64, para JSZip
+                    const base64Data = dataUrl.split(',')[1];
+                    // Mantener el nombre original pero cambiando la extensión
+                    const newName = file.name.substring(0, file.name.lastIndexOf('.')) + `.${extension}`;
+                    zip.file(newName, base64Data, { base64: true });
+
+                    progressFill.style.width = `${((i + 1) / total) * 100}%`;
+                }
+
+                convertBtn.innerText = "Comprimiendo recursos...";
+                const zipBlob = await zip.generateAsync({ type: "blob" });
+                downloadLink(URL.createObjectURL(zipBlob), `lote-convertido-${Date.now()}.zip`);
+
+                setTimeout(() => resetBtn(total), 1000);
+            }
+        });
+
+        // Convertir imagen vía Canvas
+        function convertSingleFile(file, targetFormat) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+
+                    // Fondo blanco especial si se convierte a JPEG
+                    if (targetFormat === 'image/jpeg') {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+
+                    ctx.drawImage(img, 0, 0);
+                    // Calidad predeterminada
+                    const dataUrl = canvas.toDataURL(targetFormat, 0.9);
+                    URL.revokeObjectURL(img.src);
+                    resolve(dataUrl);
+                };
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Auxiliar para detonar desgarga en el navegador
+        function downloadLink(url, filename) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function resetBtn(total) {
+            convertBtn.innerText = total > 1 ? `Convertir Lote (${total})` : "Convertir Imagen";
+            convertBtn.disabled = false;
+            progressBar.classList.remove('active');
+        }
+    </script>
+</body>
+
+</html>
