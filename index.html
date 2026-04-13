@@ -7,6 +7,7 @@
     <title>Convertidor de Imágenes Pro</title>
     <!-- Incluir JSZip para empaquetar múltiples imágenes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
     <style>
         :root {
             --bg-color: #f3f4f6;
@@ -64,6 +65,33 @@
             color: var(--text-muted);
             font-size: 0.9rem;
             margin-bottom: 2rem;
+        }
+
+        /* Tabs Styling */
+        .tabs {
+            display: flex;
+            background: #e2e8f0;
+            border-radius: 12px;
+            padding: 5px;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: var(--transition);
+        }
+
+        .tab.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
 
         /* Dropzone Styling */
@@ -166,7 +194,6 @@
             backdrop-filter: blur(4px);
         }
 
-
         /* Controles */
         .controls {
             display: flex;
@@ -197,7 +224,18 @@
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        button {
+        .bg-info-text {
+            display: none;
+            color: var(--accent);
+            font-size: 0.95rem;
+            font-weight: 600;
+            background-color: #eff6ff;
+            padding: 0.875rem;
+            border-radius: 10px;
+            border: 1px solid #bfdbfe;
+        }
+
+        button.btn-primary {
             width: 100%;
             padding: 1rem;
             border-radius: 10px;
@@ -211,17 +249,17 @@
             transform: translateY(0);
         }
 
-        button:hover {
+        button.btn-primary:hover {
             background-color: var(--primary-hover);
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
         }
 
-        button:active {
+        button.btn-primary:active {
             transform: translateY(0);
         }
 
-        button:disabled {
+        button.btn-primary:disabled {
             background-color: var(--text-muted);
             cursor: not-allowed;
             transform: none;
@@ -248,6 +286,13 @@
             background: var(--accent);
             transition: width 0.2s ease;
         }
+
+        footer {
+            margin-top: 1.5rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        footer p { margin: 0.2rem; }
     </style>
 </head>
 
@@ -256,6 +301,12 @@
     <div class="converter-box">
         <h2>Transforma</h2>
         <p class="subtitle">Formatos locales. Cero servidores. Múltiples a la vez.</p>
+
+        <!-- Tabs de Navegación -->
+        <div class="tabs">
+            <div class="tab active" id="tab-convert">Convertir Formato</div>
+            <div class="tab" id="tab-bg">✨ Quitar Fondo (IA)</div>
+        </div>
 
         <div class="drop-zone" id="dropZone">
             <p id="dropZoneText">Arrastra imágenes/carpetas aquí</p>
@@ -266,7 +317,6 @@
                     onclick="document.getElementById('folderInput').click()">Carpeta</button>
             </div>
             <input type="file" class="hidden-input" id="imageInput" accept="image/png, image/jpeg, image/webp" multiple>
-            <!-- input webkitdirectory para permitir seleccion nativa de carpetas completas -->
             <input type="file" class="hidden-input" id="folderInput" webkitdirectory directory multiple>
         </div>
 
@@ -276,13 +326,20 @@
         </div>
 
         <div class="controls">
+            <!-- Select solo visible en modo Conversión -->
             <select id="formatSelect">
                 <option value="image/webp">Convertir a WebP</option>
                 <option value="image/jpeg">Convertir a JPEG</option>
                 <option value="image/png">Convertir a PNG</option>
             </select>
 
-            <button id="convertBtn" disabled>Convertir</button>
+            <!-- Texto solo visible en modo Quitar Fondo -->
+            <div class="bg-info-text" id="bgInfoText">
+                Se guardará automáticamente en PNG para mantener la transparencia.
+            </div>
+
+            <button class="btn-primary" id="convertBtn" disabled>Convertir Imagen</button>
+            
             <div class="progress-bar" id="progressBar">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
@@ -298,7 +355,11 @@
         const imageInput = document.getElementById('imageInput');
         const folderInput = document.getElementById('folderInput');
 
+        const tabConvert = document.getElementById('tab-convert');
+        const tabBg = document.getElementById('tab-bg');
         const formatSelect = document.getElementById('formatSelect');
+        const bgInfoText = document.getElementById('bgInfoText');
+
         const convertBtn = document.getElementById('convertBtn');
         const previewContainer = document.getElementById('previewContainer');
         const preview = document.getElementById('preview');
@@ -307,12 +368,45 @@
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
 
-        let imageFilesList = []; // Centraliza los archivos a procesar
+        let imageFilesList = [];
+        let currentMode = 'convert'; // 'convert' o 'bg'
+
+        // --- SISTEMA DE TABS ---
+        tabConvert.addEventListener('click', () => {
+            currentMode = 'convert';
+            tabConvert.classList.add('active');
+            tabBg.classList.remove('active');
+            formatSelect.style.display = 'block';
+            bgInfoText.style.display = 'none';
+            updateBtnText();
+        });
+
+        tabBg.addEventListener('click', () => {
+            currentMode = 'bg';
+            tabBg.classList.add('active');
+            tabConvert.classList.remove('active');
+            formatSelect.style.display = 'none';
+            bgInfoText.style.display = 'block';
+            updateBtnText();
+        });
+
+        function updateBtnText() {
+            if (imageFilesList.length === 0) {
+                convertBtn.innerText = currentMode === 'bg' ? 'Quitar Fondo' : 'Convertir Imagen';
+                return;
+            }
+            const total = imageFilesList.length;
+            if (currentMode === 'bg') {
+                convertBtn.innerText = total > 1 ? `Quitar fondo a Lote (${total})` : "Quitar Fondo a Imagen";
+            } else {
+                convertBtn.innerText = total > 1 ? `Convertir Lote (${total})` : "Convertir Imagen";
+            }
+        }
 
         // --- Drag & Drop ---
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
-            document.body.addEventListener(eventName, preventDefaults, false); // Evitar abrir archivo en navegador
+            document.body.addEventListener(eventName, preventDefaults, false);
         });
 
         function preventDefaults(e) {
@@ -328,7 +422,6 @@
             dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
         });
 
-        // Al soltar
         dropZone.addEventListener('drop', async (e) => {
             const items = e.dataTransfer.items;
             if (!items) return;
@@ -337,8 +430,6 @@
             convertBtn.disabled = true;
 
             const filesToProcess = [];
-
-            // Explorar los items soltados (pueden ser archivos o carpetas)
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.kind === 'file') {
@@ -353,11 +444,9 @@
                     }
                 }
             }
-
             processCollectedFiles(filesToProcess);
         });
 
-        // Explorar directorios recursivamente
         async function scanEntry(entry) {
             return new Promise((resolve, reject) => {
                 if (entry.isFile) {
@@ -387,7 +476,6 @@
             });
         }
 
-        // Selección nativa desde inputs
         imageInput.addEventListener('change', function () {
             processCollectedFiles(Array.from(this.files).filter(isValidImage));
         });
@@ -400,7 +488,6 @@
             return file.type.startsWith('image/');
         }
 
-        // --- Manejo de la lista de archivos encontrados ---
         function processCollectedFiles(files) {
             if (files.length === 0) {
                 dropZoneText.innerHTML = "No se encontraron imágenes válidas.";
@@ -412,7 +499,6 @@
             imageFilesList = files;
             const firstFile = files[0];
 
-            // Renderizar la primera imagen de prueba
             const objectURL = URL.createObjectURL(firstFile);
             preview.onload = () => {
                 previewContainer.classList.add('active');
@@ -420,22 +506,20 @@
             };
             preview.src = objectURL;
 
-            // Actualizar UI
             countBadge.style.display = 'block';
             countBadge.innerHTML = `${files.length} archivo${files.length > 1 ? 's' : ''}`;
 
             if (files.length === 1) {
                 dropZoneText.innerHTML = `Lista: <span>${firstFile.name}</span>`;
-                convertBtn.innerText = "Convertir Imagen";
             } else {
                 dropZoneText.innerHTML = `Imágenes cargadas: <span>${files.length}</span>`;
-                convertBtn.innerText = `Convertir Lote (${files.length})`;
             }
 
             convertBtn.disabled = false;
+            updateBtnText();
         }
 
-        // --- Lógica de Conversión en Lote ---
+        // --- Lógica de Procesamiento ---
         convertBtn.addEventListener('click', async () => {
             if (imageFilesList.length === 0) return;
 
@@ -444,46 +528,105 @@
             progressFill.style.width = '0%';
 
             const total = imageFilesList.length;
-            const format = formatSelect.value;
+            // Si estamos en modo BG, forzamos PNG para preservar canal alfa
+            const format = currentMode === 'bg' ? 'image/png' : formatSelect.value;
             const extension = format.split('/')[1];
+            const useAI = currentMode === 'bg';
 
-            if (total === 1) {
-                convertBtn.innerText = "Procesando...";
-                const dataUrl = await convertSingleFile(imageFilesList[0], format);
-                downloadLink(dataUrl, `convertida-${Date.now()}.${extension}`);
-
-                progressFill.style.width = '100%';
-                setTimeout(() => resetBtn(total), 1000);
-            } else {
-                // Múltiples imágenes -> Crear ZIP
-                convertBtn.innerText = "Preparando ZIP...";
-                const zip = new JSZip();
-
-                for (let i = 0; i < total; i++) {
-                    const file = imageFilesList[i];
-                    convertBtn.innerText = `Convirtiendo ${i + 1}/${total}`;
-                    const dataUrl = await convertSingleFile(file, format);
-
-                    // Quitar prefijo data:image/..;base64, para JSZip
-                    const base64Data = dataUrl.split(',')[1];
-                    // Mantener el nombre original pero cambiando la extensión
-                    const newName = file.name.substring(0, file.name.lastIndexOf('.')) + `.${extension}`;
-                    zip.file(newName, base64Data, { base64: true });
-
-                    progressFill.style.width = `${((i + 1) / total) * 100}%`;
+            try {
+                // Si usa IA, importamos la librería dinámicamente
+                let removeBgFunc = null;
+                if (useAI) {
+                    convertBtn.innerText = "Cargando Motor IA...";
+                    const imglyModule = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm');
+                    removeBgFunc = imglyModule.removeBackground;
+                    
+                    if (!removeBgFunc) {
+                        throw new Error("No se pudo importar la función removeBackground. Revisa la red.");
+                    }
                 }
 
-                convertBtn.innerText = "Comprimiendo recursos...";
-                const zipBlob = await zip.generateAsync({ type: "blob" });
-                downloadLink(URL.createObjectURL(zipBlob), `lote-convertido-${Date.now()}.zip`);
+                if (total === 1) {
+                    if (useAI) convertBtn.innerText = "Aplicando IA (Puede tardar un momento)...";
+                    else convertBtn.innerText = "Procesando...";
+                    
+                    const dataUrl = await convertSingleFile(imageFilesList[0], format, useAI, removeBgFunc);
+                    
+                    // Nombres de archivos listos
+                    let suffix = useAI ? '-sinfondo' : '-convertida';
+                    let originalName = imageFilesList[0].name;
+                    let baseName = originalName.substring(0, originalName.lastIndexOf('.'));
+                    downloadLink(dataUrl, `${baseName}${suffix}.${extension}`);
 
-                setTimeout(() => resetBtn(total), 1000);
+                    progressFill.style.width = '100%';
+                    setTimeout(() => resetBtn(total), 1000);
+                } else {
+                    convertBtn.innerText = "Preparando ZIP...";
+                    const zip = new JSZip();
+
+                    for (let i = 0; i < total; i++) {
+                        const file = imageFilesList[i];
+                        if (useAI) convertBtn.innerText = `Borrando fondo ${i + 1}/${total}...`;
+                        else convertBtn.innerText = `Convirtiendo ${i + 1}/${total}`;
+                        
+                        const dataUrl = await convertSingleFile(file, format, useAI, removeBgFunc);
+
+                        const base64Data = dataUrl.split(',')[1];
+                        let originalName = file.name;
+                        let baseName = originalName.substring(0, originalName.lastIndexOf('.'));
+                        let suffix = useAI ? '-sinfondo' : '';
+                        
+                        const newName = `${baseName}${suffix}.${extension}`;
+                        zip.file(newName, base64Data, { base64: true });
+
+                        progressFill.style.width = `${((i + 1) / total) * 100}%`;
+                    }
+
+                    convertBtn.innerText = "Comprimiendo recursos...";
+                    const zipBlob = await zip.generateAsync({ type: "blob" });
+                    
+                    let suffixZip = useAI ? 'sinfondo' : 'convertido';
+                    downloadLink(URL.createObjectURL(zipBlob), `lote-${suffixZip}-${Date.now()}.zip`);
+
+                    setTimeout(() => resetBtn(total), 1000);
+                }
+            } catch (error) {
+                console.error("Error global:", error);
+                alert("Ocurrió un error. \n\nMotivo: " + error.message);
+                resetBtn(total);
             }
         });
 
-        // Convertir imagen vía Canvas
-        function convertSingleFile(file, targetFormat) {
-            return new Promise((resolve) => {
+        async function convertSingleFile(file, targetFormat, useAI, removeBgFunc) {
+            let srcBlob = file;
+            if (useAI && removeBgFunc) {
+                try {
+                    // Esperar el modelo y borrar el fondo directamente. 
+                    // Convertimos a Object URL para asegurar máxima compatibilidad con la librería IMGLY.
+                    const objectUrl = URL.createObjectURL(file);
+                    
+                    // Configuramos el progreso para que el usuario no sienta que se congeló
+                    const config = {
+                        progress: (key, current, total) => {
+                            if (total && total > 0) {
+                                const percent = Math.round((current / total) * 100);
+                                convertBtn.innerText = `Descargando IA (${percent}%)...`;
+                                progressFill.style.width = `${percent}%`;
+                            } else {
+                                convertBtn.innerText = `Calculando y borrando fondo...`;
+                            }
+                        }
+                    };
+
+                    srcBlob = await removeBgFunc(objectUrl, config);
+                    URL.revokeObjectURL(objectUrl);
+                } catch(e) {
+                    console.error("Error en IMGLY:", e);
+                    throw new Error("Falló la inteligencia artificial al procesar " + file.name + "\n" + e.message);
+                }
+            }
+
+            return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
@@ -491,23 +634,21 @@
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
 
-                    // Fondo blanco especial si se convierte a JPEG
                     if (targetFormat === 'image/jpeg') {
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                     }
 
                     ctx.drawImage(img, 0, 0);
-                    // Calidad predeterminada
                     const dataUrl = canvas.toDataURL(targetFormat, 0.9);
                     URL.revokeObjectURL(img.src);
                     resolve(dataUrl);
                 };
-                img.src = URL.createObjectURL(file);
+                img.onerror = () => reject(new Error("No se pudo cargar la imagen de salida"));
+                img.src = URL.createObjectURL(srcBlob);
             });
         }
 
-        // Auxiliar para detonar desgarga en el navegador
         function downloadLink(url, filename) {
             const link = document.createElement('a');
             link.href = url;
@@ -518,7 +659,7 @@
         }
 
         function resetBtn(total) {
-            convertBtn.innerText = total > 1 ? `Convertir Lote (${total})` : "Convertir Imagen";
+            updateBtnText();
             convertBtn.disabled = false;
             progressBar.classList.remove('active');
         }
