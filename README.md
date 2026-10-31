@@ -12,6 +12,8 @@
 
 </div>
 
+> 🇬🇧 **In English:** Convert images to WebP, JPEG or PNG and remove backgrounds with AI, entirely in the browser: no file ever leaves your computer.
+
 > Este README sirve tanto para quien quiere **usar la herramienta** como para quien quiere **modificar el código**.
 > Para usarla, ve a [Cómo se usa](#-cómo-se-usa). Para tocar el código, ve a [Desarrollo](#-desarrollo).
 
